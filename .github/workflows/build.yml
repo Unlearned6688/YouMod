@@ -19,8 +19,14 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write
-    
+
     steps:
+      - name: Checkout YouMod
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+          path: YouMod
+
       - name: Install dependencies
         run: brew install make ldid
 
@@ -29,25 +35,49 @@ jobs:
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
           echo "THEOS=${{ github.workspace }}/theos" >> $GITHUB_ENV
 
-      - name: Clone Theos
-        run: git clone --quiet --depth=1 --recurse-submodules https://github.com/roothide/theos.git
-           
-      - name: Download iOS SDK
+      # Original from YTweaks
+      - name: Get Theos commit
         run: |
-          git clone --quiet --depth=1 -n --filter=tree:0 https://github.com/Tonwalter888/iOS-SDKs.git
-          cd iOS-SDKs
-          git sparse-checkout set --no-cone iPhoneOS18.6.sdk
-          git checkout
-          mv *.sdk $THEOS/sdks
+          get_commit_hash() {
+            local repo_url=$1
+            git ls-remote "$repo_url" HEAD | awk '{print substr($1,1,7)}'
+          }
+          echo "THEOS_COMMIT=$(get_commit_hash "https://github.com/roothide/theos")" >> $GITHUB_ENV
 
-      - name: Clone your YouMod repo
-        run: git clone --quiet --depth=1 --branch ${{ inputs.branch || 'main' }} ${{ github.server_url }}/${{ github.repository }}.git YouMod
+      - name: Cache Theos
+        id: cache-theos
+        uses: actions/cache@v5
+        with:
+          path: theos
+          key: YouMod-18.6-SDK-${{ env.THEOS_COMMIT }}
 
-      - name: Clone YouTubeHeader
-        run: git clone --quiet --depth=1 https://github.com/PoomSmart/YouTubeHeader.git $THEOS/include/YouTubeHeader
-
-      - name: Clone PSHeader
-        run: git clone --quiet --depth=1 https://github.com/PoomSmart/PSheader.git $THEOS/include/PSHeader
+      - name: Setup Theos
+        if: ${{ steps.cache-theos.outputs.cache-hit != 'true' }}
+        run: |
+            git clone --quiet --depth=1 --recurse-submodules https://github.com/roothide/theos.git
+            git clone --quiet --depth=1 -n --filter=tree:0 https://github.com/Tonwalter888/iOS-SDKs.git
+            cd iOS-SDKs
+            git sparse-checkout set --no-cone iPhoneOS18.6.sdk
+            git checkout --quiet
+            mv *.sdk "$THEOS/sdks"
+            
+      - name: Clone headers
+        run: |
+          if [ ! -d "$THEOS/include/YouTubeHeader" ]; then
+            git clone --quiet --depth=1 https://github.com/PoomSmart/YouTubeHeader.git "$THEOS/include/YouTubeHeader"
+          else
+            cd $THEOS/include/YouTubeHeader
+            git pull --quiet --force
+            cd ${{ github.workspace }}
+          fi
+          
+          if [ ! -d "$THEOS/include/PSHeader" ]; then
+            git clone --quiet --depth=1 https://github.com/PoomSmart/PSHeader.git "$THEOS/include/PSHeader"
+          else
+            cd $THEOS/include/PSHeader
+            git pull --quiet --force
+            cd ${{ github.workspace }}
+          fi
 
       - name: Build YouMod
         run: |

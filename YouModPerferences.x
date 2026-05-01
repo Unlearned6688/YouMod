@@ -138,6 +138,7 @@ static NSBundle *YouModBundle() {
         [defaults setBool:YES forKey:HideCastButtonNav];
         [defaults setBool:YES forKey:HideCastButtonPlayer];
         [defaults setBool:YES forKey:BackgroundPlayback];
+        [defaults setBool:YES forKey:OldQualityPicker];
         [defaults synchronize];
         exit(0);
     } actionTitle:LOC(@"YES")];
